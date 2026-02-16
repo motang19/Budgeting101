@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Search, DollarSign, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -34,20 +34,18 @@ const BudgetCalendarApp = () => {
   ];
 
   // Load expenses from Supabase when component mounts or month changes
-  useEffect(() => {
-    loadExpenses();
-  }, [currentDate]);
-
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
+      // Get first and last day of current month
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const firstDay = new Date(year, month, 1).toISOString().split('T')[0];
       const lastDay = new Date(year, month + 1, 0).toISOString().split('T')[0];
       
+      // Query expenses for current month
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
@@ -57,6 +55,7 @@ const BudgetCalendarApp = () => {
       
       if (error) throw error;
       
+      // Group expenses by date
       const groupedExpenses = {};
       data.forEach(expense => {
         const dateKey = expense.date;
@@ -73,7 +72,11 @@ const BudgetCalendarApp = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const getCategoryColor = (category) => {
     return categories.find(c => c.name === category)?.color || 'bg-gray-500';
@@ -122,6 +125,7 @@ const BudgetCalendarApp = () => {
 
       if (error) throw error;
 
+      // Update local state
       setExpenses(prev => ({
         ...prev,
         [dateKey]: [...(prev[dateKey] || []), data]
@@ -144,6 +148,7 @@ const BudgetCalendarApp = () => {
 
       if (error) throw error;
 
+      // Update local state
       setExpenses(prev => ({
         ...prev,
         [dateKey]: prev[dateKey].filter(e => e.id !== expenseId)
@@ -210,6 +215,7 @@ const BudgetCalendarApp = () => {
     const days = [];
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+    // Week day headers
     weekDays.forEach(day => {
       days.push(
         <div key={`header-${day}`} className="text-center font-semibold text-gray-600 py-2 text-sm">
@@ -218,10 +224,12 @@ const BudgetCalendarApp = () => {
       );
     });
 
+    // Empty cells before first day
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(<div key={`empty-${i}`} className=""></div>);
     }
 
+    // Calendar days
     for (let day = 1; day <= daysInMonth; day++) {
       const total = getDayTotal(day);
       const hasExpenses = total > 0;
@@ -262,8 +270,10 @@ const BudgetCalendarApp = () => {
 
   return (
     <div className="flex h-screen bg-gray-50">
+      {/* Main Calendar Area */}
       <div className="flex-1 p-6 overflow-auto">
         <div className="max-w-5xl mx-auto">
+          {/* Error Alert */}
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
@@ -276,6 +286,7 @@ const BudgetCalendarApp = () => {
             </div>
           )}
 
+          {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Calendar className="w-8 h-8 text-blue-600" />
@@ -287,6 +298,7 @@ const BudgetCalendarApp = () => {
             </div>
           </div>
 
+          {/* Month Navigation */}
           <div className="flex items-center justify-between mb-4 bg-white rounded-lg p-4 shadow">
             <button
               onClick={() => changeMonth(-1)}
@@ -305,6 +317,7 @@ const BudgetCalendarApp = () => {
             </button>
           </div>
 
+          {/* Calendar Grid */}
           <div className="bg-white rounded-lg shadow p-4">
             <div className="grid grid-cols-7 gap-2">
               {renderCalendar()}
@@ -313,12 +326,14 @@ const BudgetCalendarApp = () => {
         </div>
       </div>
 
+      {/* Right Sidebar - Expenses List & Filters */}
       <div className="w-96 bg-white border-l border-gray-200 p-6 overflow-auto">
         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <TrendingUp className="w-5 h-5" />
           Expenses Overview
         </h2>
 
+        {/* Category Summary */}
         <div className="mb-6 bg-gray-50 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">By Category</h3>
           <div className="space-y-2">
@@ -336,6 +351,7 @@ const BudgetCalendarApp = () => {
           </div>
         </div>
 
+        {/* Search & Filter */}
         <div className="mb-4 space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -360,6 +376,7 @@ const BudgetCalendarApp = () => {
           </select>
         </div>
 
+        {/* Expenses List */}
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             {filteredExpenses.length} Expense{filteredExpenses.length !== 1 ? 's' : ''}
@@ -399,6 +416,7 @@ const BudgetCalendarApp = () => {
         </div>
       </div>
 
+      {/* Modal for Adding Expenses */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-h-[80vh] overflow-auto">
@@ -414,6 +432,7 @@ const BudgetCalendarApp = () => {
               </button>
             </div>
 
+            {/* Add New Expense Form */}
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
               <h4 className="font-semibold text-gray-800 mb-3">Add Expense</h4>
               <input
@@ -449,6 +468,7 @@ const BudgetCalendarApp = () => {
               </button>
             </div>
 
+            {/* Existing Expenses for This Day */}
             <div>
               <h4 className="font-semibold text-gray-800 mb-2">Today's Expenses</h4>
               {(expenses[selectedDay.dateKey] || []).length === 0 ? (
