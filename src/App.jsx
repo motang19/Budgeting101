@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Search, DollarSign, Calendar, TrendingUp, AlertCircle, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Plus, Search, DollarSign, Calendar, TrendingUp, AlertCircle, Settings} from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client with environment variables
