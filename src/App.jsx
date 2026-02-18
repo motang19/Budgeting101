@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Search, DollarSign, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
+import { X, Plus, Search, DollarSign, Calendar, TrendingUp, AlertCircle, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client with environment variables
@@ -23,6 +23,19 @@ const BudgetCalendarApp = () => {
     category: 'Food'
   });
 
+  // Budget allocations per category - persisted to localStorage
+  const [budgetAllocations, setBudgetAllocations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('budgetAllocations');
+      return saved ? JSON.parse(saved) : {
+        Food: '', Transport: '', Entertainment: '',
+        Shopping: '', Bills: '', Health: '', Other: ''
+      };
+    } catch { return { Food: '', Transport: '', Entertainment: '', Shopping: '', Bills: '', Health: '', Other: '' }; }
+  });
+  const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState({});
+
   const categories = [
     { name: 'Food', color: 'bg-green-500' },
     { name: 'Transport', color: 'bg-blue-500' },
@@ -39,13 +52,11 @@ const BudgetCalendarApp = () => {
       setLoading(true);
       setError(null);
       
-      // Get first and last day of current month
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const firstDay = new Date(year, month, 1).toISOString().split('T')[0];
       const lastDay = new Date(year, month + 1, 0).toISOString().split('T')[0];
       
-      // Query expenses for current month
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
@@ -55,7 +66,6 @@ const BudgetCalendarApp = () => {
       
       if (error) throw error;
       
-      // Group expenses by date
       const groupedExpenses = {};
       data.forEach(expense => {
         const dateKey = expense.date;
@@ -125,7 +135,6 @@ const BudgetCalendarApp = () => {
 
       if (error) throw error;
 
-      // Update local state
       setExpenses(prev => ({
         ...prev,
         [dateKey]: [...(prev[dateKey] || []), data]
@@ -148,7 +157,6 @@ const BudgetCalendarApp = () => {
 
       if (error) throw error;
 
-      // Update local state
       setExpenses(prev => ({
         ...prev,
         [dateKey]: prev[dateKey].filter(e => e.id !== expenseId)
@@ -206,6 +214,48 @@ const BudgetCalendarApp = () => {
     return getAllExpenses().reduce((sum, e) => sum + e.amount, 0);
   };
 
+  const saveBudgetAllocations = () => {
+    localStorage.setItem('budgetAllocations', JSON.stringify(budgetDraft));
+    setBudgetAllocations({ ...budgetDraft });
+    setShowBudgetSettings(false);
+  };
+
+  const openBudgetSettings = () => {
+    setBudgetDraft({ ...budgetAllocations });
+    setShowBudgetSettings(true);
+  };
+
+  // Returns bar color based on % used
+  const getBudgetBarColor = (pct) => {
+    if (pct >= 100) return 'bg-red-500';
+    if (pct >= 80) return 'bg-orange-400';
+    return 'bg-green-500';
+  };
+
+  const getBudgetTextColor = (pct) => {
+    if (pct >= 100) return 'text-red-600';
+    if (pct >= 80) return 'text-orange-500';
+    return 'text-green-600';
+  };
+
+  // Calculate average daily spend based on days elapsed so far this month
+  const getAvgDailySpend = () => {
+    const now = new Date();
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const isCurrentMonth =
+      now.getFullYear() === year && now.getMonth() === month;
+
+    // For current month: divide by days elapsed (up to today)
+    // For past months: divide by total days in that month
+    const daysElapsed = isCurrentMonth
+      ? now.getDate()
+      : new Date(year, month + 1, 0).getDate();
+
+    const total = getMonthTotal();
+    return daysElapsed > 0 ? total / daysElapsed : 0;
+  };
+
   const changeMonth = (direction) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
   };
@@ -215,7 +265,6 @@ const BudgetCalendarApp = () => {
     const days = [];
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    // Week day headers
     weekDays.forEach(day => {
       days.push(
         <div key={`header-${day}`} className="text-center font-semibold text-gray-600 py-2 text-sm">
@@ -224,12 +273,10 @@ const BudgetCalendarApp = () => {
       );
     });
 
-    // Empty cells before first day
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(<div key={`empty-${i}`} className=""></div>);
     }
 
-    // Calendar days
     for (let day = 1; day <= daysInMonth; day++) {
       const total = getDayTotal(day);
       const hasExpenses = total > 0;
@@ -256,6 +303,13 @@ const BudgetCalendarApp = () => {
   const categoryTotals = getCategoryTotals();
   const filteredExpenses = getFilteredExpenses();
   const monthTotal = getMonthTotal();
+  const avgDailySpend = getAvgDailySpend();
+
+  // Determine label based on whether viewing current or past month
+  const now = new Date();
+  const isCurrentMonth =
+    now.getFullYear() === currentDate.getFullYear() &&
+    now.getMonth() === currentDate.getMonth();
 
   if (loading) {
     return (
@@ -292,9 +346,19 @@ const BudgetCalendarApp = () => {
               <Calendar className="w-8 h-8 text-blue-600" />
               <h1 className="text-3xl font-bold text-gray-800">Budget Calendar</h1>
             </div>
-            <div className="text-right">
-              <div className="text-sm text-gray-600">Total This Month</div>
-              <div className="text-2xl font-bold text-green-600">${monthTotal.toFixed(2)}</div>
+            {/* Stats: Total + Avg Daily */}
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <div className="text-sm text-gray-600">Total This Month</div>
+                <div className="text-2xl font-bold text-green-600">${monthTotal.toFixed(2)}</div>
+              </div>
+              <div className="w-px h-10 bg-gray-200"></div>
+              <div className="text-right">
+                <div className="text-sm text-gray-600">
+                  {isCurrentMonth ? 'Avg Per Day (so far)' : 'Avg Per Day'}
+                </div>
+                <div className="text-2xl font-bold text-blue-600">${avgDailySpend.toFixed(2)}</div>
+              </div>
             </div>
           </div>
 
@@ -326,28 +390,78 @@ const BudgetCalendarApp = () => {
         </div>
       </div>
 
-      {/* Right Sidebar - Expenses List & Filters */}
+      {/* Right Sidebar */}
       <div className="w-96 bg-white border-l border-gray-200 p-6 overflow-auto">
         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <TrendingUp className="w-5 h-5" />
           Expenses Overview
         </h2>
 
-        {/* Category Summary */}
+        {/* Avg Daily Spend Card in Sidebar */}
+        <div className="mb-4 bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-blue-700">
+              {isCurrentMonth ? 'Daily Average (so far)' : 'Daily Average'}
+            </div>
+            <div className="text-xs text-blue-500 mt-0.5">
+              {isCurrentMonth
+                ? `Based on ${now.getDate()} day${now.getDate() !== 1 ? 's' : ''} elapsed`
+                : `Based on all ${new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()} days`}
+            </div>
+          </div>
+          <div className="text-2xl font-bold text-blue-700">${avgDailySpend.toFixed(2)}</div>
+        </div>
+
+        {/* Category Budget Summary */}
         <div className="mb-6 bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">By Category</h3>
-          <div className="space-y-2">
-            {categories.map(cat => (
-              <div key={cat.name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${cat.color}`}></div>
-                  <span className="text-gray-700">{cat.name}</span>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">By Category</h3>
+            <button
+              onClick={openBudgetSettings}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              <Settings className="w-3 h-3" />
+              Set Budgets
+            </button>
+          </div>
+          <div className="space-y-3">
+            {categories.map(cat => {
+              const spent = categoryTotals[cat.name] || 0;
+              const allocated = parseFloat(budgetAllocations[cat.name]) || 0;
+              const hasBudget = allocated > 0;
+              const pct = hasBudget ? Math.min((spent / allocated) * 100, 100) : 0;
+              const pctDisplay = hasBudget ? Math.round((spent / allocated) * 100) : null;
+
+              return (
+                <div key={cat.name}>
+                  <div className="flex justify-between items-center text-sm mb-1">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${cat.color}`}></div>
+                      <span className="text-gray-700">{cat.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-800">${spent.toFixed(2)}</span>
+                      {hasBudget && (
+                        <span className="text-gray-400 text-xs">/ ${allocated.toFixed(0)}</span>
+                      )}
+                      {pctDisplay !== null && (
+                        <span className={`text-xs font-bold ${getBudgetTextColor(pctDisplay)}`}>
+                          {pctDisplay}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {hasBudget && (
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-300 ${getBudgetBarColor(pctDisplay)}`}
+                        style={{ width: `${pct}%` }}
+                      ></div>
+                    </div>
+                  )}
                 </div>
-                <span className="font-semibold text-gray-800">
-                  ${categoryTotals[cat.name].toFixed(2)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -499,6 +613,56 @@ const BudgetCalendarApp = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Budget Settings Modal */}
+      {showBudgetSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">Monthly Budget Allocations</h3>
+              <button onClick={() => setShowBudgetSettings(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Set how much you want to spend per category this month. Leave blank for no limit.</p>
+            <div className="space-y-3">
+              {categories.map(cat => (
+                <div key={cat.name} className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 w-32">
+                    <div className={`w-3 h-3 rounded-full ${cat.color}`}></div>
+                    <span className="text-sm font-medium text-gray-700">{cat.name}</span>
+                  </div>
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="No limit"
+                      value={budgetDraft[cat.name] || ''}
+                      onChange={(e) => setBudgetDraft(prev => ({ ...prev, [cat.name]: e.target.value }))}
+                      className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowBudgetSettings(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveBudgetAllocations}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+              >
+                Save Budgets
+              </button>
             </div>
           </div>
         </div>
