@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Calendar, TrendingUp, AlertCircle, LogOut } from 'lucide-react';
+import { X, Calendar, AlertCircle, LogOut } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import ExpenseModal from './ExpenseModal';
 import BudgetSettingsModal from './BudgetSettingsModal';
