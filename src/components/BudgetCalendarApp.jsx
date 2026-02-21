@@ -131,6 +131,22 @@ const BudgetCalendarApp = ({ session }) => {
     } catch { setError('Failed to delete expense.'); }
   };
 
+  const handleUpdateExpense = async (dateKey, expenseId, updates) => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(updates)
+        .eq('id', expenseId)
+        .select()
+        .single();
+      if (error) throw error;
+      setExpenses(prev => ({
+        ...prev,
+        [dateKey]: prev[dateKey].map(e => e.id === expenseId ? data : e)
+      }));
+    } catch { setError('Failed to update expense.'); }
+  };
+
   // Save all budget allocations to Supabase using upsert
   const saveBudgetAllocations = async () => {
     try {
@@ -300,6 +316,7 @@ const BudgetCalendarApp = ({ session }) => {
           getCategoryColor={getCategoryColor}
           onAdd={handleAddExpense}
           onDelete={handleDeleteExpense}
+          onUpdate={handleUpdateExpense}
           onClose={() => setShowModal(false)}
         />
       )}
